@@ -1,0 +1,147 @@
+{
+  "DeepSeek-V3": {
+    "model_info": {
+      "total_parameters": "671B",
+      "active_parameters": "37B",
+      "activation_ratio": "5.5%",
+      "architecture": "MoE with MLA"
+    },
+    
+    "architecture": {
+      "num_hidden_layers": 61,
+      "hidden_size": 7168,
+      "num_attention_heads": 128,
+      "num_key_value_heads": 128,
+      "head_dim": 56,
+      "max_position_embeddings": 163840,
+      "vocab_size": 102400,
+      "rms_norm_eps": 1e-6,
+      
+      "mla_config": {
+        "q_lora_rank": 1536,
+        "kv_lora_rank": 512,
+        "qk_rope_head_dim": 64,
+        "qk_nope_head_dim": 64,
+        "v_head_dim": 128,
+        "compression_ratio": 32
+      },
+      
+      "moe_config": {
+        "num_experts": 256,
+        "num_experts_per_tok": 8,
+        "moe_intermediate_size": 2048,
+        "intermediate_size": 18944,
+        "shared_expert_size": 18944,
+        "routing_type": "top_k",
+        "load_balancing": "no_aux_loss"
+      }
+    },
+    
+    "MLA": {
+      "description": "Multi-head Latent Attention for extreme KV compression",
+      "kv_compression_ratio": 32,
+      "memory_reduction": "93.3%",
+      "throughput_improvement": "5.76x",
+      
+      "optimization_params": {
+        "gpu_cache_ratio": 0.2,
+        "cpu_offload_ratio": 0.8,
+        "prefetch_distance": 512,
+        "batch_decode_threshold": 16
+      }
+    },
+    
+    "RetroInfer": {
+      "description": "RetroInfer compatibility mode with MLA compression",
+      "static_pattern_start": 0.0,
+      "static_pattern_end": 0.2,
+      "core": 8,
+      "n_centroids": 32,
+      "n_segment": 16,
+      "nprobe": 8,
+      "max_compute_cluster_num": 4,
+      "cache_unit_size": 512,
+      "cache_cluster_num": 16,
+      
+      "mla_integration": {
+        "use_compressed_vectors": true,
+        "vector_dim": 512,
+        "index_type": "IVF_FLAT",
+        "metric": "IP"
+      }
+    }
+  },
+  
+  "DeepSeek-V2": {
+    "model_info": {
+      "total_parameters": "236B",
+      "active_parameters": "21B",
+      "activation_ratio": "8.9%",
+      "architecture": "MoE with MLA"
+    },
+    
+    "architecture": {
+      "num_hidden_layers": 60,
+      "hidden_size": 5120,
+      "num_attention_heads": 128,
+      "num_key_value_heads": 128,
+      "head_dim": 40,
+      "max_position_embeddings": 131072,
+      "vocab_size": 102400,
+      "rms_norm_eps": 1e-6,
+      
+      "mla_config": {
+        "q_lora_rank": 1024,
+        "kv_lora_rank": 512,
+        "qk_rope_head_dim": 64,
+        "qk_nope_head_dim": 64,
+        "v_head_dim": 128,
+        "compression_ratio": 32
+      },
+      
+      "moe_config": {
+        "num_experts": 160,
+        "num_experts_per_tok": 6,
+        "moe_intermediate_size": 1536,
+        "intermediate_size": 12288,
+        "shared_expert_size": 12288,
+        "routing_type": "top_k",
+        "load_balancing": "aux_loss"
+      }
+    },
+    
+    "MLA": {
+      "description": "Multi-head Latent Attention for extreme KV compression",
+      "kv_compression_ratio": 32,
+      "memory_reduction": "93.3%",
+      "throughput_improvement": "5.76x",
+      
+      "optimization_params": {
+        "gpu_cache_ratio": 0.25,
+        "cpu_offload_ratio": 0.75,
+        "prefetch_distance": 256,
+        "batch_decode_threshold": 8
+      }
+    },
+    
+    "RetroInfer": {
+      "description": "RetroInfer compatibility mode with MLA compression",
+      "static_pattern_start": 0.0,
+      "static_pattern_end": 0.2,
+      "core": 8,
+      "n_centroids": 32,
+      "n_segment": 16,
+      "nprobe": 8,
+      "max_compute_cluster_num": 4,
+      "cache_unit_size": 512,
+      "cache_cluster_num": 16,
+      
+      "mla_integration": {
+        "use_compressed_vectors": true,
+        "vector_dim": 512,
+        "index_type": "IVF_FLAT",
+        "metric": "IP"
+      }
+    }
+  }
+}
