@@ -262,7 +262,7 @@ class DeepSeekModel(LLM):
         max_length: int,
         dtype: torch.dtype,
         device_map: str,
-        model_version: str = "v3"  # "v2" or "v3"
+        model_version: str = "v3"  # "v2", "v2-lite", or "v3"
     ) -> None:
         """
         初始化DeepSeek模型
@@ -272,7 +272,7 @@ class DeepSeekModel(LLM):
             max_length: 最大序列长度
             dtype: 数据类型
             device_map: 设备映射策略
-            model_version: 模型版本（v2或v3）
+            model_version: 模型版本（v2, v2-lite, 或 v3）
         """
         super().__init__(model_name, max_length, dtype, device_map)
         
@@ -450,8 +450,20 @@ class DeepSeekModel(LLM):
         
     def get_model_info(self):
         """获取模型信息"""
-        total_params = sum(p.numel() for p in self.parameters())
-        active_params = self.hidden_size * 2  # 简化计算
+        # 根据版本获取参数
+        if self.model_version == "v3":
+            total_params = 671e9
+            active_params = 37e9
+        elif self.model_version == "v2":
+            total_params = 236e9
+            active_params = 21e9
+        elif self.model_version == "v2-lite":
+            total_params = 15.7e9
+            active_params = 2.8e9
+        else:
+            # 默认值
+            total_params = sum(p.numel() for p in self.parameters())
+            active_params = self.hidden_size * 2
         
         info = {
             "model_version": self.model_version,
