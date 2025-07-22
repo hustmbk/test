@@ -35,15 +35,15 @@ class MLAAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.num_key_value_heads = config.num_key_value_heads or self.num_heads
+        self.num_key_value_heads = getattr(config, 'num_key_value_heads', self.num_heads)
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         
         # MLA特定参数
-        self.q_lora_rank = config.q_lora_rank  # Query LoRA秩
-        self.kv_lora_rank = config.kv_lora_rank  # 压缩的KV维度（如512）
-        self.qk_rope_head_dim = config.qk_rope_head_dim  # RoPE维度
+        self.q_lora_rank = getattr(config, 'q_lora_rank', 1536)  # Query LoRA秩
+        self.kv_lora_rank = getattr(config, 'kv_lora_rank', 512)  # 压缩的KV维度（如512）
+        self.qk_rope_head_dim = getattr(config, 'qk_rope_head_dim', 64)  # RoPE维度
         self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim  # 非RoPE维度
-        self.v_head_dim = config.v_head_dim or self.head_dim
+        self.v_head_dim = getattr(config, 'v_head_dim', self.head_dim)
         
         # 初始化MLA投影矩阵
         self._init_mla_projections()
@@ -146,9 +146,9 @@ class DeepSeekMoELayer(nn.Module):
         # MoE配置
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.num_experts = config.num_experts  # 路由专家数量（如256）
-        self.num_experts_per_tok = config.num_experts_per_tok  # 每个token激活的专家数（如8）
-        self.moe_intermediate_size = config.moe_intermediate_size  # 每个专家的中间层大小
+        self.num_experts = getattr(config, 'num_experts', 256)  # 路由专家数量（如256）
+        self.num_experts_per_tok = getattr(config, 'num_experts_per_tok', 8)  # 每个token激活的专家数（如8）
+        self.moe_intermediate_size = getattr(config, 'moe_intermediate_size', config.intermediate_size // 8)  # 每个专家的中间层大小
         
         # 共享专家（所有token都经过）
         self.shared_expert = nn.Sequential(
@@ -236,8 +236,9 @@ class DeepSeekLayer:
         self.mlp = DeepSeekMoELayer(config, layer_idx, device).to(device)
         
         # LayerNorm
-        self.input_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(device)
-        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(device)
+        rms_norm_eps = getattr(config, 'rms_norm_eps', 1e-6)
+        self.input_layernorm = nn.RMSNorm(config.hidden_size, eps=rms_norm_eps).to(device)
+        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, eps=rms_norm_eps).to(device)
         
     def init_from_hf(self, hf_layer):
         """从HuggingFace模型初始化权重"""
@@ -291,13 +292,25 @@ class DeepSeekModel(LLM):
         self.hidden_size = self.config.hidden_size
         self.vocab_size = self.config.vocab_size
         
-        # MLA特定参数
-        self.kv_lora_rank = self.config.kv_lora_rank  # KV压缩维度
-        self.q_lora_rank = self.config.q_lora_rank
+        # MLA特定参数 (可能不存在于所有配置中)
+        self.kv_lora_rank = getattr(self.config, 'kv_lora_rank', 512)  # 默认值512
+        self.q_lora_rank = getattr(self.config, 'q_lora_rank', 1536)  # 默认值1536
         
-        # MoE特定参数
-        self.num_experts = self.config.num_experts
-        self.num_experts_per_tok = self.config.num_experts_per_tok
+        # MoE特定参数 (可能不存在于所有配置中)
+        self.num_experts = getattr(self.config, 'num_experts', 0)  # 0表示不使用MoE
+        self.num_experts_per_tok = getattr(self.config, 'num_experts_per_tok', 0)
+        
+        # 根据模型版本设置默认值
+        if self.num_experts == 0:
+            if model_version == "v3":
+                self.num_experts = 256
+                self.num_experts_per_tok = 8
+            elif model_version == "v2":
+                self.num_experts = 160
+                self.num_experts_per_tok = 6
+            elif model_version == "v2-lite":
+                self.num_experts = 64
+                self.num_experts_per_tok = 6
         
         # 初始化模型
         self.init_model()
@@ -326,7 +339,8 @@ class DeepSeekModel(LLM):
         self.lm_head = nn.Linear(self.hidden_size, self.vocab_size, bias=False).to(device_0)
         
         # 初始化最终的RMSNorm
-        self.norm = nn.RMSNorm(self.hidden_size, eps=self.config.rms_norm_eps).to(device_0)
+        rms_norm_eps = getattr(self.config, 'rms_norm_eps', 1e-6)
+        self.norm = nn.RMSNorm(self.hidden_size, eps=rms_norm_eps).to(device_0)
         
         # 初始化位置编码
         self.position_ids = torch.arange(0, self.max_length).to(device_0)
