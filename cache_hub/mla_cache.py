@@ -5,10 +5,10 @@
 import torch
 import numpy as np
 from typing import List, Tuple, Optional, Dict
-from .cache import BasicCache
+from .cache import KV_Cache
 
 
-class MLACache(BasicCache):
+class MLACache(KV_Cache):
     """
     MLA压缩KV缓存
     
@@ -47,7 +47,13 @@ class MLACache(BasicCache):
             model_version: 模型版本（v2或v3）
             cpu_offload_ratio: 存储在CPU上的缓存比例
         """
-        super().__init__(valid_start, layer_num, batch_size, max_length, dtype)
+        # Note: MLACache has a different initialization pattern than KV_Cache
+        # We'll initialize parent class attributes directly instead of calling super().__init__()
+        self.layer_num = layer_num
+        self.batch_size = batch_size
+        self.max_length = max_length
+        self.dtype = dtype
+        self.context = 0
         
         self.kv_lora_rank = kv_lora_rank
         self.layer_mapping = layer_mapping
