@@ -279,8 +279,12 @@ class DeepSeekModel(LLM):
         self.model_version = model_version
         
         # 加载配置和tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.config = AutoConfig.from_pretrained(model_name)
+        # 检查是否是本地路径
+        import os
+        local_files_only = os.path.exists(model_name) and os.path.isdir(model_name)
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=local_files_only)
+        self.config = AutoConfig.from_pretrained(model_name, local_files_only=local_files_only)
         
         # 提取模型参数
         self.num_layers = self.config.num_hidden_layers

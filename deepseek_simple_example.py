@@ -31,8 +31,15 @@ def main():
     parser.add_argument("--model-version", type=str, default="v3", 
                         choices=["v2", "v2-lite", "v3"],
                         help="Model version to use")
+    parser.add_argument("--model-path", type=str, default=None,
+                        help="Local model path (overrides default model name)")
     args = parser.parse_args()
     model_version = args.model_version
+    
+    # Use local path if provided
+    if args.model_path:
+        model_name = args.model_path
+        print(f"Using local model path: {model_name}")
     
     print(colored(f"DeepSeek-{model_version.upper()} + RetroInfer Simple Example", "cyan", attrs=["bold"]))
     print("=" * 50)
