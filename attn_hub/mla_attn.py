@@ -35,13 +35,15 @@ def apply_decoupled_rope(query_states, key_states, position_ids, rope_dim, cos_c
     k_rope = k_rope.reshape(-1, rope_dim)
     
     # 应用RoPE（使用FlashInfer的高效实现）
+    # 合并cos和sin缓存
+    cos_sin_cache = torch.cat([cos_cache, sin_cache], dim=-1)
+    
     flashinfer.rope.apply_rope_with_cos_sin_cache_inplace(
         position_ids.flatten(),
         q_rope,
         k_rope,
         rope_dim,
-        cos_cache,
-        sin_cache,
+        cos_sin_cache,
         True  # interleaved
     )
     
