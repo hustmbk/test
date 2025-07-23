@@ -578,12 +578,15 @@ class DeepSeekModel(LLM):
         
         # 安全地扩展维度以匹配rope_dim
         if rope_dim > 0 and cos.numel() > 0 and sin.numel() > 0:
-            cos_cache = torch.stack([cos, cos], dim=-1).reshape(-1, rope_dim)
-            sin_cache = torch.stack([sin, sin], dim=-1).reshape(-1, rope_dim)
+            # 确保reshape参数正确
+            cos_expanded = torch.stack([cos, cos], dim=-1)
+            sin_expanded = torch.stack([sin, sin], dim=-1)
+            cos_cache = cos_expanded.reshape(self.max_length, rope_dim)
+            sin_cache = sin_expanded.reshape(self.max_length, rope_dim)
         else:
             # 如果遇到空张量，创建默认的缓存
-            cos_cache = torch.zeros(self.max_length, rope_dim)
-            sin_cache = torch.zeros(self.max_length, rope_dim)
+            cos_cache = torch.zeros((self.max_length, rope_dim), dtype=torch.float32)
+            sin_cache = torch.zeros((self.max_length, rope_dim), dtype=torch.float32)
         
         # 移动到第一个设备
         device_0 = self.device_map if self.device_map != "auto" else f'cuda:{self.gpu_ids[0]}'
