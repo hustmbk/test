@@ -117,8 +117,8 @@ class QwenModel(LLM):
             self.inv_freq = inv_freq
             self.attention_scaling = attention_factor
 
-        t = torch.arange(self.max_length, device=self.inv_freq.device, dtype=self.dtype)  # 使用模型数据类型
-        freqs = torch.outer(t, self.inv_freq.to(self.dtype))  # 确保inv_freq也是正确类型
+        t = torch.arange(self.max_length, device=self.inv_freq.device, dtype=torch.float32)  # FlashInfer要求float32
+        freqs = torch.outer(t, self.inv_freq.to(torch.float32))  # FlashInfer要求float32
         return freqs.cos()*self.attention_scaling, freqs.sin()*self.attention_scaling
 
 

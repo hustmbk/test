@@ -647,20 +647,20 @@ class DeepSeekModel(LLM):
             cos_cache = cos_expanded.reshape(self.max_length, rope_dim)
             sin_cache = sin_expanded.reshape(self.max_length, rope_dim)
         else:
-            # 如果遇到空张量，创建默认的缓存（使用模型数据类型）
-            cos_cache = torch.zeros((self.max_length, rope_dim), dtype=self.dtype)
-            sin_cache = torch.zeros((self.max_length, rope_dim), dtype=self.dtype)
+            # 如果遇到空张量，创建默认的缓存（FlashInfer要求float32）
+            cos_cache = torch.zeros((self.max_length, rope_dim), dtype=torch.float32)
+            sin_cache = torch.zeros((self.max_length, rope_dim), dtype=torch.float32)
         
-        # 移动到设备并转换为模型相同的数据类型（FlashInfer要求fp16/bf16，不支持float32）
+        # 移动到设备并转换为FlashInfer要求的数据类型（cos_sin_cache必须是float32）
         device_0 = self.device_map if self.device_map != "auto" else f'cuda:{self.gpu_ids[0]}'
-        model_dtype = self.dtype  # 使用模型的数据类型（通常是torch.float16）
-        cos_cache = cos_cache.to(device_0, dtype=model_dtype)  # 改为模型数据类型
-        sin_cache = sin_cache.to(device_0, dtype=model_dtype)  # 改为模型数据类型
+        # FlashInfer混合精度要求：cos_sin_cache必须是float32，query/key可以是fp16
+        cos_cache = cos_cache.to(device_0, dtype=torch.float32)  # FlashInfer要求float32
+        sin_cache = sin_cache.to(device_0, dtype=torch.float32)  # FlashInfer要求float32
         
         # 存储分别的cos和sin缓存（用于MLA）
         self.cos_sin_cache = (cos_cache, sin_cache)
         
-        # 同时创建合并的缓存（用于FlashInfer）- 使用模型数据类型
+        # 同时创建合并的缓存（用于FlashInfer）- 必须是float32
         self.cos_sin_cache_merged = torch.cat([cos_cache, sin_cache], dim=-1)
         
     def init_kv_cache(self, real_input_length, valid_start, attn_config=None):
