@@ -748,7 +748,7 @@ class DeepSeekModel(LLM):
             # MLA注意力
             attn_output, compressed_kv = layer.self_attn(
                 hidden_states,
-                position_ids=self.position_ids[start_bdx:start_bdx+seq_len],
+                position_ids=self.position_ids[self.kv_cache.context:self.kv_cache.context+seq_len].unsqueeze(0).repeat(bsz, 1),
                 use_cache=True
             )
             
@@ -763,7 +763,7 @@ class DeepSeekModel(LLM):
             # Post-norm和MoE FFN
             residual = hidden_states
             hidden_states = self.layernorm(hidden_states, layer.post_attention_layernorm)
-            moe_output, router_logits = layer.mlp(hidden_states)
+            moe_output, _ = layer.mlp(hidden_states)  # 忽略router_logits
             hidden_states = residual + moe_output
             
             logger.debug(f"第{layer_idx}层预填充处理完成", output_shape=hidden_states.shape)

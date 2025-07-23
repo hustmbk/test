@@ -130,12 +130,32 @@ def mla_prefill_attn(
     key_states = key_states.transpose(1, 2)
     value_states = value_states.transpose(1, 2)
     
-    # Flash Attention计算
-    attn_output = flashinfer.BatchPrefillAttention(
-        num_heads=num_heads,
-        head_dim=head_dim,
-        causal=causal
-    ).forward(query_states, key_states, value_states)
+    # Flash Attention要求所有张量具有相同的最后一个维度
+    # 如果v_head_dim != head_dim，我们需要特殊处理
+    if v_head_dim != head_dim:
+        # 对于不兼容的维度，使用手动注意力计算
+        # 计算注意力分数
+        scale = 1.0 / (head_dim ** 0.5)
+        scores = torch.matmul(query_states, key_states.transpose(-2, -1)) * scale
+        
+        if causal:
+            # 应用因果掩码
+            seq_len = scores.size(-1)
+            mask = torch.triu(torch.ones(seq_len, seq_len, device=scores.device), diagonal=1).bool()
+            scores.masked_fill_(mask, float('-inf'))
+        
+        # 应用softmax
+        attn_weights = F.softmax(scores, dim=-1)
+        
+        # 计算输出
+        attn_output = torch.matmul(attn_weights, value_states)
+    else:
+        # 如果维度兼容，使用Flash Attention
+        attn_output = flashinfer.BatchPrefillAttention(
+            num_heads=num_heads,
+            head_dim=head_dim,
+            causal=causal
+        ).forward(query_states, key_states, value_states)
     
     # 转回原始格式 [bs, seq_len, num_heads, v_head_dim]
     attn_output = attn_output.transpose(1, 2)
@@ -217,11 +237,21 @@ def mla_decode_attn(
     key_states = key_states.transpose(1, 2)
     value_states = value_states.transpose(1, 2)
     
-    # 解码注意力计算
-    attn_output = flashinfer.BatchDecodeAttention(
-        num_heads=num_heads,
-        head_dim=head_dim
-    ).forward(query_states, key_states, value_states)
+    # Flash Attention要求所有张量具有相同的最后一个维度
+    if v_head_dim != head_dim:
+        # 对于不兼容的维度，使用手动注意力计算
+        scale = 1.0 / (head_dim ** 0.5)
+        scores = torch.matmul(query_states, key_states.transpose(-2, -1)) * scale
+        
+        # 解码时只需要因果掩码（当前位置只能看到之前的位置）
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_output = torch.matmul(attn_weights, value_states)
+    else:
+        # 如果维度兼容，使用Flash Attention
+        attn_output = flashinfer.BatchDecodeAttention(
+            num_heads=num_heads,
+            head_dim=head_dim
+        ).forward(query_states, key_states, value_states)
     
     # 转回原始格式
     attn_output = attn_output.transpose(1, 2)
