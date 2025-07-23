@@ -5,6 +5,7 @@ import torch
 import torch.nn.functional as F
 import flashinfer
 from typing import Optional, Tuple
+from utils.logger import get_logger, log_error_with_context
 
 
 def apply_decoupled_rope(query_states, key_states, position_ids, rope_dim, cos_cache, sin_cache):

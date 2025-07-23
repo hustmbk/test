@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from typing import List, Tuple, Optional, Dict
 from .cache import KV_Cache
+from utils.logger import get_logger, log_gpu_memory, log_error_with_context
 
 
 class MLACache(KV_Cache):

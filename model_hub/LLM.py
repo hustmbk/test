@@ -5,6 +5,7 @@
 import time
 import torch
 from termcolor import colored
+from utils.logger import get_logger, start_phase, end_phase, log_gpu_memory, log_error_with_context, log_inference_stats
 
 
 class LLM:
@@ -36,6 +37,12 @@ class LLM:
             dtype: 模型计算的数据类型（如torch.float16）
             device_map: 设备映射，支持 'cuda:x' 或 'auto'（自动使用所有可见GPU）
         """
+        logger = get_logger()
+        logger.info("初始化LLM基础模型", 
+                   model_name=model_name,
+                   max_length=max_length,
+                   dtype=str(dtype),
+                   device_map=device_map)
 
         self.model_name = model_name
         self.max_length = max_length
@@ -66,74 +73,89 @@ class LLM:
         
         注意：使用分块处理以降低内存消耗
         """
-        # print(f'Layer = {layer_idx}, start_bdx = {start_bdx}')
-
-        bsz, seq_len, dim = hidden_states.shape
-        layer = self.layers[layer_idx]
+        logger = get_logger()
+        logger.debug(f"开始处理第{layer_idx}层预填充", 
+                    start_bdx=start_bdx, 
+                    input_shape=hidden_states.shape)
         
-        # 保留原始hidden_states作为残差，克隆一个新的用于处理
-        temp_hidden_states = hidden_states.clone()
+        try:
+            bsz, seq_len, dim = hidden_states.shape
+            layer = self.layers[layer_idx]
+            
+            # 保留原始hidden_states作为残差，克隆一个新的用于处理
+            temp_hidden_states = hidden_states.clone()
 
-        # 分块处理以降低内存消耗
-        # 每次处理8192个token（根据batch size调整）
-        # 这种策略可以有效避免GPU内存溢出
-        for start_idx in range(0, seq_len, 8192//bsz):
-            end_idx = min(seq_len, start_idx + 8192//bsz)
-            temp_hidden_states[:, start_idx:end_idx, :] = self.layernorm(temp_hidden_states[:, start_idx:end_idx, :], 
-                                                                         layer.input_layernorm_variance_epsilon, 
-                                                                         layer.input_layernorm_weight)
-        
-        # 计算查询(Q)、键(K)、值(V)矩阵
-        query_states, key_states, value_states = self.wqkv(temp_hidden_states, layer)
-        # 立即释放临时变量以节省内存
-        del temp_hidden_states
-        torch.cuda.empty_cache()
-        # 应用旋转位置编码(RoPE)
-        query_states, key_states = self.position_embedd(query_states, key_states)
+            # 分块处理以降低内存消耗
+            # 每次处理8192个token（根据batch size调整）
+            # 这种策略可以有效避免GPU内存溢出
+            for start_idx in range(0, seq_len, 8192//bsz):
+                end_idx = min(seq_len, start_idx + 8192//bsz)
+                temp_hidden_states[:, start_idx:end_idx, :] = self.layernorm(temp_hidden_states[:, start_idx:end_idx, :], 
+                                                                             layer.input_layernorm_variance_epsilon, 
+                                                                             layer.input_layernorm_weight)
+            
+            # 计算查询(Q)、键(K)、值(V)矩阵
+            query_states, key_states, value_states = self.wqkv(temp_hidden_states, layer)
+            # 立即释放临时变量以节省内存
+            del temp_hidden_states
+            torch.cuda.empty_cache()
+            # 应用旋转位置编码(RoPE)
+            query_states, key_states = self.position_embedd(query_states, key_states)
 
-        # 重塑张量形状以适应多头注意力计算
-        query_states = query_states.view(bsz, seq_len, self.num_heads, self.head_dim)       # reshape [bs, seq_len, dim] => [bs, seq_len, head, head_dim]
-        key_states = key_states.view(bsz, seq_len, self.num_key_value_heads, self.head_dim)
-        value_states = value_states.view(bsz, seq_len, self.num_key_value_heads, self.head_dim)
+            # 重塑张量形状以适应多头注意力计算
+            query_states = query_states.view(bsz, seq_len, self.num_heads, self.head_dim)       # reshape [bs, seq_len, dim] => [bs, seq_len, head, head_dim]
+            key_states = key_states.view(bsz, seq_len, self.num_key_value_heads, self.head_dim)
+            value_states = value_states.view(bsz, seq_len, self.num_key_value_heads, self.head_dim)
 
-        # 更新KV缓存（这是RetroInfer的核心优化部分）
-        # 缓存会被存储在GPU或CPU上，取决于attention_type
-        key_states, value_states = self.kv_cache.prefill_update_kv_cache(query_states, key_states, value_states, layer_idx, start_bdx)
-        torch.cuda.empty_cache()
+            # 更新KV缓存（这是RetroInfer的核心优化部分）
+            # 缓存会被存储在GPU或CPU上，取决于attention_type
+            key_states, value_states = self.kv_cache.prefill_update_kv_cache(query_states, key_states, value_states, layer_idx, start_bdx)
+            torch.cuda.empty_cache()
 
-        # 执行注意力计算
-        temp_attn_out = self.prefill_attention(query_states, key_states, value_states)
+            # 执行注意力计算
+            temp_attn_out = self.prefill_attention(query_states, key_states, value_states)
 
-        # 同步KV缓存（对于CPU缓存，确保数据传输完成）
-        self.kv_cache.sync(layer_idx, start_bdx)
+            # 同步KV缓存（对于CPU缓存，确保数据传输完成）
+            self.kv_cache.sync(layer_idx, start_bdx)
 
-        # 释放内存
-        del query_states, key_states, value_states
-        torch.cuda.empty_cache()
+            # 释放内存
+            del query_states, key_states, value_states
+            torch.cuda.empty_cache()
 
-        # 输出投影并加上残差连接
-        hidden_states += self.wo(temp_attn_out, layer, temp_attn_out.shape[0], seq_len, dim)
-        del temp_attn_out
-        torch.cuda.empty_cache()
+            # 输出投影并加上残差连接
+            hidden_states += self.wo(temp_attn_out, layer, temp_attn_out.shape[0], seq_len, dim)
+            del temp_attn_out
+            torch.cuda.empty_cache()
 
-        # Post-attention处理：LayerNorm + FFN + 残差连接
-        residual = hidden_states.clone()
+            # Post-attention处理：LayerNorm + FFN + 残差连接
+            residual = hidden_states.clone()
 
-        # 分块处理FFN以降低内存消耗
-        for start_idx in range(0, seq_len, 8192//bsz):
-            end_idx = min(seq_len, start_idx + 8192//bsz)
-            hidden_states[:, start_idx:end_idx, :] = self.layernorm(hidden_states[:, start_idx:end_idx, :], 
-                                                                    layer.post_attention_layernorm_variance_epsilon, 
-                                                                    layer.post_attention_layernorm_weight)
-            hidden_states[:, start_idx:end_idx, :] = self.mlp(hidden_states[:, start_idx:end_idx, :], layer)   
-        
-        # 最终的残差连接
-        hidden_states += residual
+            # 分块处理FFN以降低内存消耗
+            for start_idx in range(0, seq_len, 8192//bsz):
+                end_idx = min(seq_len, start_idx + 8192//bsz)
+                hidden_states[:, start_idx:end_idx, :] = self.layernorm(hidden_states[:, start_idx:end_idx, :], 
+                                                                        layer.post_attention_layernorm_variance_epsilon, 
+                                                                        layer.post_attention_layernorm_weight)
+                hidden_states[:, start_idx:end_idx, :] = self.mlp(hidden_states[:, start_idx:end_idx, :], layer)   
+            
+            # 最终的残差连接
+            hidden_states += residual
 
-        del residual
-        torch.cuda.empty_cache()
-                                                                                                   
-        return hidden_states
+            del residual
+            torch.cuda.empty_cache()
+            
+            logger.debug(f"第{layer_idx}层预填充处理完成", output_shape=hidden_states.shape)
+                                                                                                       
+            return hidden_states
+            
+        except Exception as e:
+            log_error_with_context(e, {
+                "layer_idx": layer_idx,
+                "start_bdx": start_bdx,
+                "input_shape": hidden_states.shape if 'hidden_states' in locals() else "unknown",
+                "phase": "prefill"
+            })
+            raise
 
 
     def layer_decode(self, layer_idx, hidden_states):
@@ -286,10 +308,18 @@ class LLM:
         - 解码延迟：每生成一个token的平均时间
         - 吞吐量：每秒生成的token数
         """
+        logger = get_logger()
         outputs_ids = []    # 存储所有生成的token
         output_ids = []     # 当前迭代生成的token
         
-        print("Start prefilling ...")
+        logger.info("开始推理流程", 
+                   input_shape=inputs_ids.shape,
+                   max_new_length=self.max_new_length)
+        
+        # 预填充阶段
+        start_phase("prefill")
+        log_gpu_memory(phase="prefill_start")
+        
         # 同步GPU确保时间测量准确
         torch.cuda.synchronize()
         prefill_start = time.time()
@@ -303,13 +333,27 @@ class LLM:
 
         torch.cuda.synchronize()
         prefill_end = time.time()
-        print(colored(f"Prefilling latency: {round((prefill_end - prefill_start), 4)} s\n", 'green'))
+        prefill_time = prefill_end - prefill_start
+        
+        log_gpu_memory(phase="prefill_end")
+        end_phase("prefill")
+        
+        logger.info(f"预填充阶段完成", 
+                   duration_s=round(prefill_time, 4),
+                   tokens_processed=inputs_ids.shape[1])
+        print(colored(f"Prefilling latency: {round(prefill_time, 4)} s\n", 'green'))
 
-        print("Start decoding ...")
+        # 解码阶段
+        start_phase("decode")
+        log_gpu_memory(phase="decode_start")
+        
         decode_start = time.time()
 
         # 解码循环：逐个生成新token
-        for _ in range(self.max_new_length-1):
+        for step in range(self.max_new_length-1):
+            if step % 10 == 0:  # 每10步记录一次进度
+                logger.debug(f"解码进度: {step}/{self.max_new_length-1}")
+                
             # 基于之前生成的token计算下一个token的概率分布
             logits = self.decode_forward(inputs_ids=output_ids)
             # 贪婪解码：选择概率最大的token
@@ -317,14 +361,37 @@ class LLM:
             outputs_ids.append(output_ids)
 
         decode_end = time.time()
+        decode_time = decode_end - decode_start
+        tokens_per_sec = self.batch_size * (self.max_new_length - 1) / decode_time
+        ms_per_step = decode_time * 1000 / (self.max_new_length - 1)
+        
+        log_gpu_memory(phase="decode_end")
+        end_phase("decode")
+        
+        # 记录推理统计信息
+        stats = {
+            "prefill_latency_s": prefill_time,
+            "decode_latency_s": decode_time,
+            "total_latency_s": prefill_time + decode_time,
+            "decode_ms_per_step": ms_per_step,
+            "throughput_tokens_per_s": tokens_per_sec,
+            "input_tokens": inputs_ids.shape[1],
+            "generated_tokens": self.max_new_length - 1,
+            "batch_size": self.batch_size
+        }
+        
+        log_inference_stats(stats)
+        
         print(colored(
-            f"Decoding latency: {round((decode_end - decode_start) * 1000 / (self.max_new_length - 1), 2)} ms/step, "
-            f"Throughput: {round(self.batch_size * (self.max_new_length - 1) / (decode_end - decode_start), 2)} tokens/s\n",
+            f"Decoding latency: {round(ms_per_step, 2)} ms/step, "
+            f"Throughput: {round(tokens_per_sec, 2)} tokens/s\n",
             'green'
         ))
         
         # 合并所有生成的token
         outputs_ids = torch.cat(outputs_ids, dim=-1).tolist()
+        
+        logger.info("推理完成", total_tokens_generated=len(outputs_ids) * len(outputs_ids[0]))
         
         return outputs_ids
 
@@ -345,8 +412,16 @@ class LLM:
             
         重要：这是用户调用的主要接口，负责初始化缓存并启动推理流程
         """
-
+        logger = get_logger()
+        
         bs, input_length = inputs_ids.shape
+        logger.info("开始生成任务", 
+                   attention_type=attention_type,
+                   batch_size=bs,
+                   input_length=input_length,
+                   max_new_length=max_new_length,
+                   total_max_length=self.max_length)
+        
         # 验证序列长度不超过模型的最大支持长度
         # 这是为了防止KV缓存溢出和位置编码越界
         assert input_length + max_new_length <= self.max_length, \
@@ -361,18 +436,26 @@ class LLM:
         # attention_masks中0表示padding，1表示有效token
         # valid_start记录了每个序列中第一个有效token的位置
         valid_start = attention_masks.shape[1] - torch.sum(attention_masks, dim=-1).detach().cpu().numpy()
+        logger.debug("计算有效token起始位置", valid_start=valid_start.tolist())
+        
         # 释放attention_masks以节省内存
         del attention_masks
         torch.cuda.empty_cache()
 
-        print("Allocate GPU buffers and CPU pin memory ...\n")
+        logger.info("开始分配GPU缓冲区和CPU固定内存")
+        start_phase("cache_initialization")
+        
         # 初始化KV缓存
         # 根据attention_type选择不同的缓存策略：
         # - flash_attn: 全部缓存在GPU上
         # - retroinfer_attn: 使用GPU-CPU混合缓存
         self.init_kv_cache(input_length, valid_start, attn_config)
-
+        
+        end_phase("cache_initialization")
+        
         # 执行推理
         outputs = self.inference(inputs_ids)
+        
+        logger.info("生成任务完成")
 
         return outputs
