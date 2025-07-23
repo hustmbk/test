@@ -543,6 +543,16 @@ class DeepSeekModel(LLM):
                 self.num_experts = 64
                 self.num_experts_per_tok = 6
         
+        # 设置模型大小（用于内存估算）
+        if model_version == "v3":
+            self.model_size_gb = 336  # DeepSeek V3 约336GB
+        elif model_version == "v2":
+            self.model_size_gb = 118  # DeepSeek V2 约118GB  
+        elif model_version == "v2-lite":
+            self.model_size_gb = 8   # DeepSeek V2 Lite 约8GB
+        else:
+            self.model_size_gb = 8   # 默认值
+        
         logger.info(f"DeepSeek {model_version} 模型参数", 
                    num_layers=self.num_layers,
                    hidden_size=self.hidden_size,

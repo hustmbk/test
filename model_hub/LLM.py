@@ -494,7 +494,8 @@ class LLM:
                 head_dim=getattr(self, 'head_dim', 128),
                 dtype=getattr(self, 'dtype', torch.float16),
                 layer_mapping=getattr(self, 'layer_mapping', {}),
-                num_gpus=getattr(self, 'num_gpus', 1)
+                num_gpus=getattr(self, 'num_gpus', 1),
+                model_size=getattr(self, 'model_size_gb', 8)  # 默认8GB模型大小
             )
             logger.info("Flash Attention缓存初始化成功")
             
