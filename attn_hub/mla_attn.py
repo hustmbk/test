@@ -46,8 +46,8 @@ def apply_decoupled_rope(query_states, key_states, position_ids, rope_dim, cos_c
         # 如果已经是合并格式
         cos_sin_cache = cos_cache
     
-    # 确保数据类型与query/key一致
-    cos_sin_cache = cos_sin_cache.to(dtype=q_rope.dtype, device=q_rope.device)
+    # 确保在正确设备上，但保持float32数据类型（FlashInfer要求）
+    cos_sin_cache = cos_sin_cache.to(device=q_rope.device, dtype=torch.float32)
     
     # FlashInfer期望完整的cos_sin_cache和position_ids，内部会处理索引
     flashinfer.rope.apply_rope_with_cos_sin_cache_inplace(

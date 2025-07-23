@@ -630,12 +630,12 @@ class DeepSeekModel(LLM):
         if rope_dim <= 0 or rope_dim % 2 != 0:
             rope_dim = 64  # 使用默认值
             
-        # 预计算cos和sin缓存
+        # 预计算cos和sin缓存 - 保持float32数据类型（FlashInfer要求）
         inv_freq = 1.0 / (rope_theta ** (torch.arange(0, rope_dim, 2).float() / rope_dim))
         t = torch.arange(self.max_length, dtype=torch.float32)
         freqs = torch.einsum('i,j->ij', t, inv_freq)
         
-        # 创建cos和sin缓存
+        # 创建cos和sin缓存 - 重要：保持float32，不转换为模型dtype
         cos = torch.cos(freqs)
         sin = torch.sin(freqs)
         
@@ -651,15 +651,15 @@ class DeepSeekModel(LLM):
             cos_cache = torch.zeros((self.max_length, rope_dim), dtype=torch.float32)
             sin_cache = torch.zeros((self.max_length, rope_dim), dtype=torch.float32)
         
-        # 移动到第一个设备并确保数据类型与模型一致
+        # 移动到设备但保持float32数据类型（FlashInfer的要求）
         device_0 = self.device_map if self.device_map != "auto" else f'cuda:{self.gpu_ids[0]}'
-        cos_cache = cos_cache.to(device_0, dtype=self.dtype)
-        sin_cache = sin_cache.to(device_0, dtype=self.dtype)
+        cos_cache = cos_cache.to(device_0, dtype=torch.float32)  # 保持float32
+        sin_cache = sin_cache.to(device_0, dtype=torch.float32)  # 保持float32
         
         # 存储分别的cos和sin缓存（用于MLA）
         self.cos_sin_cache = (cos_cache, sin_cache)
         
-        # 同时创建合并的缓存（用于FlashInfer）
+        # 同时创建合并的缓存（用于FlashInfer） - 也保持float32
         self.cos_sin_cache_merged = torch.cat([cos_cache, sin_cache], dim=-1)
         
     def init_kv_cache(self, real_input_length, valid_start, attn_config=None):
