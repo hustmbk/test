@@ -49,9 +49,12 @@ def apply_decoupled_rope(query_states, key_states, position_ids, rope_dim, cos_c
     # 确保在正确设备上，但保持float32数据类型（FlashInfer要求）
     cos_sin_cache = cos_sin_cache.to(device=q_rope.device, dtype=torch.float32)
     
-    # FlashInfer期望完整的cos_sin_cache和二维position_ids，内部会处理索引
+    # FlashInfer RoPE API需要正确的position_ids格式
+    # 将二维position_ids转换为一维格式，这是FlashInfer期望的格式
+    position_ids_flat = position_ids.reshape(-1)
+    
     flashinfer.rope.apply_rope_with_cos_sin_cache_inplace(
-        position_ids,  # 保持二维形状 [batch_size, seq_len]
+        position_ids_flat,  # 使用一维position_ids格式
         q_rope,
         k_rope,
         rope_dim,  # 对于解耦RoPE，这里应该是rope_dim而不是完整的head_dim

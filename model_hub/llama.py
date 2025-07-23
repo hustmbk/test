@@ -560,9 +560,12 @@ class LlamaModel(LLM):
         query_states = query_states.view(-1, hidden_dim)
         key_states = key_states.view(-1, kv_dim)
         
+        # FlashInfer RoPE API需要一维position_ids，将[bsz, seq_len]转换为一维
+        position_ids_flat = position_ids.reshape(-1)
+        
         # 使用FlashInfer的高效RoPE实现
         flashinfer.rope.apply_rope_with_cos_sin_cache_inplace(
-            position_ids, query_states, key_states, 
+            position_ids_flat, query_states, key_states, 
             self.head_dim, self.cos_sin_cache, True
         )
         
