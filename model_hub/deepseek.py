@@ -64,9 +64,9 @@ class MLAAttention(nn.Module):
             raise ValueError("Config must have 'num_attention_heads' attribute")
         
         # MLA配置参数
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
+        self.hidden_size = int(config.hidden_size)
+        self.num_heads = int(config.num_attention_heads)
+        self.head_dim = int(self.hidden_size // self.num_heads)
         
         # 验证head_dim
         if self.hidden_size % self.num_heads != 0:
@@ -77,11 +77,11 @@ class MLAAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         
         # MLA特定参数
-        self.q_lora_rank = getattr(config, 'q_lora_rank', 1536)  # Query LoRA秩
-        self.kv_lora_rank = getattr(config, 'kv_lora_rank', 512)  # 压缩的KV维度（如512）
-        self.qk_rope_head_dim = getattr(config, 'qk_rope_head_dim', 64)  # RoPE维度
-        self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim  # 非RoPE维度
-        self.v_head_dim = getattr(config, 'v_head_dim', self.head_dim)
+        self.q_lora_rank = int(getattr(config, 'q_lora_rank', 1536))  # Query LoRA秩
+        self.kv_lora_rank = int(getattr(config, 'kv_lora_rank', 512))  # 压缩的KV维度（如512）
+        self.qk_rope_head_dim = int(getattr(config, 'qk_rope_head_dim', 64))  # RoPE维度
+        self.qk_nope_head_dim = int(self.head_dim - self.qk_rope_head_dim)  # 非RoPE维度
+        self.v_head_dim = int(getattr(config, 'v_head_dim', self.head_dim))
         
         logger.info(f"MLAAttention层 {layer_idx} 配置完成", 
                    hidden_size=self.hidden_size,
@@ -97,22 +97,53 @@ class MLAAttention(nn.Module):
         
     def _init_mla_projections(self):
         """初始化MLA的低秩投影矩阵"""
-        # Query低秩分解: hidden -> q_lora_rank -> q_heads * head_dim
-        self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=False)
-        self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        logger = get_logger()
         
-        # 压缩的KV投影: hidden -> kv_lora_rank
-        self.kv_a_proj = nn.Linear(self.hidden_size, self.kv_lora_rank, bias=False)
-        
-        # 解压缩投影
-        # Key: kv_lora_rank -> num_heads * (qk_nope_head_dim + qk_rope_head_dim)
-        self.k_b_proj = nn.Linear(self.kv_lora_rank, self.num_heads * self.head_dim, bias=False)
-        
-        # Value: kv_lora_rank -> num_heads * v_head_dim
-        self.v_b_proj = nn.Linear(self.kv_lora_rank, self.num_heads * self.v_head_dim, bias=False)
-        
-        # 输出投影
-        self.o_proj = nn.Linear(self.num_heads * self.v_head_dim, self.hidden_size, bias=False)
+        try:
+            # 确保所有维度都是整数
+            hidden_size = int(self.hidden_size)
+            q_lora_rank = int(self.q_lora_rank)
+            kv_lora_rank = int(self.kv_lora_rank)
+            num_heads = int(self.num_heads)
+            head_dim = int(self.head_dim)
+            v_head_dim = int(self.v_head_dim)
+            
+            logger.debug(f"MLA投影参数: hidden_size={hidden_size}, q_lora_rank={q_lora_rank}, "
+                        f"kv_lora_rank={kv_lora_rank}, num_heads={num_heads}, "
+                        f"head_dim={head_dim}, v_head_dim={v_head_dim}")
+            
+            # 验证参数合理性
+            if hidden_size <= 0 or q_lora_rank <= 0 or kv_lora_rank <= 0:
+                raise ValueError(f"Invalid dimensions: hidden_size={hidden_size}, "
+                               f"q_lora_rank={q_lora_rank}, kv_lora_rank={kv_lora_rank}")
+            
+            # Query低秩分解: hidden -> q_lora_rank -> q_heads * head_dim
+            self.q_a_proj = nn.Linear(hidden_size, q_lora_rank, bias=False)
+            self.q_b_proj = nn.Linear(q_lora_rank, num_heads * head_dim, bias=False)
+            
+            # 压缩的KV投影: hidden -> kv_lora_rank
+            self.kv_a_proj = nn.Linear(hidden_size, kv_lora_rank, bias=False)
+            
+            # 解压缩投影
+            # Key: kv_lora_rank -> num_heads * (qk_nope_head_dim + qk_rope_head_dim)
+            self.k_b_proj = nn.Linear(kv_lora_rank, num_heads * head_dim, bias=False)
+            
+            # Value: kv_lora_rank -> num_heads * v_head_dim
+            self.v_b_proj = nn.Linear(kv_lora_rank, num_heads * v_head_dim, bias=False)
+            
+            # 输出投影
+            self.o_proj = nn.Linear(num_heads * v_head_dim, hidden_size, bias=False)
+            
+            logger.debug("MLA投影矩阵创建成功")
+            
+        except Exception as e:
+            logger.error(f"MLA投影初始化失败: {str(e)}", 
+                        hidden_size=getattr(self, 'hidden_size', 'undefined'),
+                        q_lora_rank=getattr(self, 'q_lora_rank', 'undefined'),
+                        kv_lora_rank=getattr(self, 'kv_lora_rank', 'undefined'),
+                        num_heads=getattr(self, 'num_heads', 'undefined'),
+                        head_dim=getattr(self, 'head_dim', 'undefined'))
+            raise
         
     def forward(self, hidden_states, position_ids=None, attention_mask=None, use_cache=True):
         """
@@ -290,11 +321,11 @@ class DeepSeekMoELayer(nn.Module):
         logger.debug(f"初始化DeepSeekMoELayer层 {layer_idx}", device=device)
         
         # MoE配置
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.num_experts = getattr(config, 'num_experts', 256)  # 路由专家数量（如256）
-        self.num_experts_per_tok = getattr(config, 'num_experts_per_tok', 8)  # 每个token激活的专家数（如8）
-        self.moe_intermediate_size = getattr(config, 'moe_intermediate_size', config.intermediate_size // 8)  # 每个专家的中间层大小
+        self.hidden_size = int(config.hidden_size)
+        self.intermediate_size = int(config.intermediate_size)
+        self.num_experts = int(getattr(config, 'num_experts', 256))  # 路由专家数量（如256）
+        self.num_experts_per_tok = int(getattr(config, 'num_experts_per_tok', 8))  # 每个token激活的专家数（如8）
+        self.moe_intermediate_size = int(getattr(config, 'moe_intermediate_size', config.intermediate_size // 8))  # 每个专家的中间层大小
         
         logger.info(f"MoE层 {layer_idx} 配置", 
                    num_experts=self.num_experts,
@@ -471,17 +502,17 @@ class DeepSeekModel(LLM):
                 raise ValueError(f"Model config missing required attribute: {attr}")
         
         # 提取模型参数
-        self.num_layers = self.config.num_hidden_layers
-        self.hidden_size = self.config.hidden_size
-        self.vocab_size = self.config.vocab_size
+        self.num_layers = int(self.config.num_hidden_layers)
+        self.hidden_size = int(self.config.hidden_size)
+        self.vocab_size = int(self.config.vocab_size)
         
         # MLA特定参数 (可能不存在于所有配置中)
-        self.kv_lora_rank = getattr(self.config, 'kv_lora_rank', 512)  # 默认值512
-        self.q_lora_rank = getattr(self.config, 'q_lora_rank', 1536)  # 默认值1536
+        self.kv_lora_rank = int(getattr(self.config, 'kv_lora_rank', 512))  # 默认值512
+        self.q_lora_rank = int(getattr(self.config, 'q_lora_rank', 1536))  # 默认值1536
         
         # MoE特定参数 (可能不存在于所有配置中)
-        self.num_experts = getattr(self.config, 'num_experts', 0)  # 0表示不使用MoE
-        self.num_experts_per_tok = getattr(self.config, 'num_experts_per_tok', 0)
+        self.num_experts = int(getattr(self.config, 'num_experts', 0))  # 0表示不使用MoE
+        self.num_experts_per_tok = int(getattr(self.config, 'num_experts_per_tok', 0))
         
         # 根据模型版本设置默认值
         if self.num_experts == 0:
