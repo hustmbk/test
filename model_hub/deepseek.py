@@ -230,16 +230,16 @@ class MLAAttention(nn.Module):
         应用解耦的RoPE位置编码
         只对qk_rope_head_dim维度应用RoPE，其余维度保持不变
         """
-        # 使用父模型的cos_sin_cache
-        if hasattr(self, 'parent_model') and hasattr(self.parent_model, 'cos_sin_cache'):
-            cos_cache, sin_cache = self.parent_model.cos_sin_cache
+        # 使用父模型的合并缓存
+        if hasattr(self, 'parent_model') and hasattr(self.parent_model, 'cos_sin_cache_merged'):
+            cos_sin_cache_merged = self.parent_model.cos_sin_cache_merged
             
             # 导入解耦RoPE函数
             from attn_hub.mla_attn import apply_decoupled_rope
             
             return apply_decoupled_rope(
                 query_states, key_states, position_ids,
-                self.qk_rope_head_dim, cos_cache, sin_cache
+                self.qk_rope_head_dim, cos_sin_cache_merged, None  # 传递合并缓存，sin_cache设为None
             )
         else:
             # 如果没有缓存，返回原始状态

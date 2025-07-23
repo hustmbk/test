@@ -35,8 +35,11 @@ def apply_decoupled_rope(query_states, key_states, position_ids, rope_dim, cos_c
     k_rope = k_rope.reshape(-1, rope_dim)
     
     # 应用RoPE（使用FlashInfer的高效实现）
-    # 确保cos_sin_cache是合并格式且数据类型正确
-    if cos_cache.dim() == 2 and sin_cache.dim() == 2:
+    # 处理cos_sin_cache格式
+    if sin_cache is None:
+        # 如果sin_cache为None，说明cos_cache已经是合并格式
+        cos_sin_cache = cos_cache
+    elif cos_cache.dim() == 2 and sin_cache.dim() == 2:
         # 如果是分离的cos和sin缓存，需要合并
         cos_sin_cache = torch.cat([cos_cache, sin_cache], dim=-1)
     else:
@@ -46,15 +49,13 @@ def apply_decoupled_rope(query_states, key_states, position_ids, rope_dim, cos_c
     # 确保数据类型与query/key一致
     cos_sin_cache = cos_sin_cache.to(dtype=q_rope.dtype, device=q_rope.device)
     
-    # 获取position对应的cos_sin值
-    pos_cos_sin = cos_sin_cache[position_ids.flatten()]
-    
+    # FlashInfer期望完整的cos_sin_cache和position_ids，内部会处理索引
     flashinfer.rope.apply_rope_with_cos_sin_cache_inplace(
         position_ids.flatten(),
         q_rope,
         k_rope,
         rope_dim,
-        pos_cos_sin,
+        cos_sin_cache,  # 传递完整缓存，而不是索引后的
         True  # interleaved
     )
     
