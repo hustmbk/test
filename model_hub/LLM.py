@@ -459,3 +459,56 @@ class LLM:
         logger.info("生成任务完成")
 
         return outputs
+
+
+    def init_kv_cache(self, real_input_length, valid_start, attn_config=None):
+        """
+        初始化KV缓存（基类默认实现）
+        
+        参数:
+            real_input_length: 实际输入长度
+            valid_start: 有效序列的起始位置
+            attn_config: 注意力配置
+            
+        这是基类的默认实现，支持Flash Attention缓存。
+        具体模型可以重写此方法以支持特定的缓存类型。
+        """
+        logger = get_logger()
+        logger.info("初始化标准Flash Attention缓存", 
+                   attention_type=getattr(self, 'attention_type', 'unknown'),
+                   input_length=real_input_length,
+                   batch_size=getattr(self, 'batch_size', 'unknown'))
+        
+        try:
+            # 导入缓存模块
+            from cache_hub import flash_attn_cache
+            
+            # 默认使用Flash Attention缓存
+            self.kv_cache = flash_attn_cache(
+                valid_start=valid_start,
+                layer_num=getattr(self, 'num_layers', 32),
+                batch_size=getattr(self, 'batch_size', 1),
+                max_length=getattr(self, 'max_new_length', 100) + real_input_length,
+                num_key_value_heads=getattr(self, 'num_key_value_heads', 32),
+                num_heads=getattr(self, 'num_heads', 32),
+                head_dim=getattr(self, 'head_dim', 128),
+                dtype=getattr(self, 'dtype', torch.float16),
+                layer_mapping=getattr(self, 'layer_mapping', {}),
+                num_gpus=getattr(self, 'num_gpus', 1)
+            )
+            logger.info("Flash Attention缓存初始化成功")
+            
+        except Exception as e:
+            logger.error("KV缓存初始化失败", error=e)
+            raise
+
+
+    def move(self):
+        """
+        执行必要的数据移动操作
+        
+        某些缓存实现需要在预填充后执行数据移动
+        （例如将数据从GPU移动到CPU）
+        """
+        if hasattr(self, 'kv_cache') and hasattr(self.kv_cache, 'move'):
+            self.kv_cache.move()

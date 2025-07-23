@@ -565,6 +565,11 @@ class DeepSeekModel(LLM):
         if self.device_map == 'auto' and self.num_gpus == 1:
             self.device_map = 'cuda:0'
             
+        # 设置模型级别的注意力参数（用于缓存初始化）
+        self.num_heads = safe_int_config(self.config, 'num_attention_heads', 32)
+        self.num_key_value_heads = safe_int_config(self.config, 'num_key_value_heads', self.num_heads)
+        self.head_dim = int(self.hidden_size // self.num_heads)
+        
         # 创建层到设备的映射
         if self.device_map != "auto":  # 单GPU
             self.layer_mapping = {str(i): self.device_map for i in range(self.num_layers)}
