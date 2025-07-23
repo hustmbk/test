@@ -651,9 +651,16 @@ class DeepSeekModel(LLM):
             cos_cache = torch.zeros((self.max_length, rope_dim), dtype=torch.float32)
             sin_cache = torch.zeros((self.max_length, rope_dim), dtype=torch.float32)
         
-        # 移动到第一个设备
+        # 移动到第一个设备并确保数据类型与模型一致
         device_0 = self.device_map if self.device_map != "auto" else f'cuda:{self.gpu_ids[0]}'
-        self.cos_sin_cache = (cos_cache.to(device_0), sin_cache.to(device_0))
+        cos_cache = cos_cache.to(device_0, dtype=self.dtype)
+        sin_cache = sin_cache.to(device_0, dtype=self.dtype)
+        
+        # 存储分别的cos和sin缓存（用于MLA）
+        self.cos_sin_cache = (cos_cache, sin_cache)
+        
+        # 同时创建合并的缓存（用于FlashInfer）
+        self.cos_sin_cache_merged = torch.cat([cos_cache, sin_cache], dim=-1)
         
     def init_kv_cache(self, real_input_length, valid_start, attn_config=None):
         """
