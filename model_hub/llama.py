@@ -138,8 +138,8 @@ class LlamaModel(LLM):
         - 缓存大小基于max_length而非max_position_embeddings
         - 应用了attention_scaling以支持长序列
         """
-        t = torch.arange(self.max_length, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(t, self.inv_freq)
+        t = torch.arange(self.max_length, device=self.inv_freq.device, dtype=self.dtype)  # 使用模型数据类型
+        freqs = torch.outer(t, self.inv_freq.to(self.dtype))  # 确保inv_freq也是正确类型
         return freqs.cos()*self.attention_scaling, freqs.sin()*self.attention_scaling
 
 
