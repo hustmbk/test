@@ -600,8 +600,8 @@ class DeepSeekModel(LLM):
         rms_norm_eps = getattr(self.config, 'rms_norm_eps', 1e-6)
         self.norm = RMSNorm(self.hidden_size, eps=rms_norm_eps).to(device_0)
         
-        # 初始化位置编码
-        self.position_ids = torch.arange(0, self.max_length).to(device_0)
+        # 初始化位置编码 - 确保使用正确的数据类型
+        self.position_ids = torch.arange(0, self.max_length, dtype=torch.int32).to(device_0)
         self._init_rope()
         
         # 初始化各层
