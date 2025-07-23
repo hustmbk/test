@@ -185,14 +185,14 @@ class MLAAttention(nn.Module):
         try:
             # Query低秩投影
             q_compressed = self.q_a_proj(hidden_states)  # [bs, seq_len, q_lora_rank]
-            query_states = self.q_b_proj(q_compressed)  # [bs, seq_len, num_heads * head_dim]
+            query_states = self.q_b_proj(q_compressed).to(self.parent_model.dtype)  # 强制转换为模型数据类型
             
             # KV压缩投影（这是MLA的核心优化）
             compressed_kv = self.kv_a_proj(hidden_states)  # [bs, seq_len, kv_lora_rank]
             
-            # 解压缩得到K和V
-            key_states = self.k_b_proj(compressed_kv)  # [bs, seq_len, num_heads * head_dim]
-            value_states = self.v_b_proj(compressed_kv)  # [bs, seq_len, num_heads * v_head_dim]
+            # 解压缩得到K和V，并强制转换数据类型
+            key_states = self.k_b_proj(compressed_kv).to(self.parent_model.dtype)  # 强制转换为模型数据类型
+            value_states = self.v_b_proj(compressed_kv).to(self.parent_model.dtype)  # 强制转换为模型数据类型
             
             # 重塑为多头格式
             query_states = query_states.view(batch_size, seq_len, self.num_heads, self.head_dim)
@@ -284,7 +284,7 @@ class MLAAttention(nn.Module):
         
         # Query低秩投影
         q_compressed = self.q_a_proj(hidden_states)
-        query_states = self.q_b_proj(q_compressed)
+        query_states = self.q_b_proj(q_compressed).to(self.parent_model.dtype)  # 强制转换为模型数据类型
         
         # 重塑为多头格式
         query_states = query_states.view(batch_size, 1, self.num_heads, self.head_dim)

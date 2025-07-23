@@ -112,9 +112,13 @@ def mla_prefill_attn(
     """
     batch_size, seq_len, _ = query_states.shape
     
-    # 解压缩得到K和V
+    # 解压缩得到K和V，确保数据类型一致
     key_states = k_b_proj(compressed_kv)  # [bs, seq_len, num_heads * head_dim]
     value_states = v_b_proj(compressed_kv)  # [bs, seq_len, num_heads * v_head_dim]
+    
+    # 强制转换为与query_states相同的数据类型（确保FlashInfer兼容性）
+    key_states = key_states.to(query_states.dtype)
+    value_states = value_states.to(query_states.dtype)
     
     # 重塑为多头格式
     query_states = query_states.view(batch_size, seq_len, num_heads, head_dim)
@@ -210,7 +214,7 @@ def mla_decode_attn(
     # 这可能包括GPU和CPU部分的合并
     compressed_kv_history = cache_manager.get_compressed_kv(layer_idx)
     
-    # 解压缩历史KV
+    # 解压缩历史KV，确保数据类型一致
     key_cache = k_b_proj(compressed_kv_history)
     value_cache = v_b_proj(compressed_kv_history)
     
@@ -218,6 +222,12 @@ def mla_decode_attn(
     current_compressed_kv = compressed_kv_cache
     current_key = k_b_proj(current_compressed_kv)
     current_value = v_b_proj(current_compressed_kv)
+    
+    # 强制转换为与query_states相同的数据类型
+    key_cache = key_cache.to(query_states.dtype)
+    value_cache = value_cache.to(query_states.dtype)
+    current_key = current_key.to(query_states.dtype)
+    current_value = current_value.to(query_states.dtype)
     
     # 合并历史和当前
     key_states = torch.cat([key_cache, current_key], dim=1)

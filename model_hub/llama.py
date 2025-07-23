@@ -556,6 +556,10 @@ class LlamaModel(LLM):
         bsz, _, hidden_dim = query_states.shape
         _, _, kv_dim = key_states.shape
         
+        # 确保张量数据类型一致，FlashInfer要求fp16/bf16
+        query_states = query_states.to(self.dtype)
+        key_states = key_states.to(self.dtype)
+        
         # 展平以应用RoPE
         query_states = query_states.view(-1, hidden_dim)
         key_states = key_states.view(-1, kv_dim)
