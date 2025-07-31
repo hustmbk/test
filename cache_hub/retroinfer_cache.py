@@ -536,12 +536,31 @@ class retroinfer_cache(KV_Cache):
         static_len = self.static_pattern_total if layer_idx == self.layer_num - 1 else self.static_pattern_total + 1
 
         # search for TopK centroids
-        batch_gemm_softmax(queries, self.centroids[layer_idx], self.gemm_o, self.norm, self.sum, self.softmax_o,
-                           self.batch_groups, self.group_size, self.n_centroids, self.head_dim,
-                           self.RSQRT_DIM, 0)       # [batch_size*group_num, group_size, n_centroids]
-        dist = torch.sum(self.softmax_o, dim=1)     # [batch_size*group_num, n_centroids]
+        # Reshape queries from (batch_size, 1, head_num, dim) to (batch_size*kv_head, group_size, dim)
+        # head_num = kv_head * group_size
+        queries_reshaped = queries.view(self.batch_size, 1, self.kv_head, self.group_size, self.head_dim)  # (batch_size, 1, kv_head, group_size, dim)
+        queries_reshaped = queries_reshaped.view(self.batch_size * self.kv_head, self.group_size, self.head_dim)  # (batch_size*kv_head, group_size, dim)
+        
+        # Ensure all tensors are contiguous
+        if not queries_reshaped.is_contiguous():
+            queries_reshaped = queries_reshaped.contiguous()
+        if not self.centroids[layer_idx].is_contiguous():
+            self.centroids[layer_idx] = self.centroids[layer_idx].contiguous()
+        if not self.gemm_o.is_contiguous():
+            self.gemm_o = self.gemm_o.contiguous()
+        if not self.norm.is_contiguous():
+            self.norm = self.norm.contiguous()
+        if not self.sum.is_contiguous():
+            self.sum = self.sum.contiguous()
+        if not self.softmax_o.is_contiguous():
+            self.softmax_o = self.softmax_o.contiguous()
+            
+        batch_gemm_softmax(queries_reshaped, self.centroids[layer_idx], self.gemm_o, self.norm, self.sum, self.softmax_o,
+                           self.batch_size * self.kv_head, self.group_size, self.n_centroids, self.head_dim,
+                           self.RSQRT_DIM, 0)       # [batch_size*kv_head, group_size, n_centroids]
+        dist = torch.sum(self.softmax_o, dim=1)     # [batch_size*kv_head, n_centroids]
         dist.masked_fill_(self.centroids_mask[layer_idx], self.DTYPE_MIN)
-        cI = torch.topk(dist, self.max_compute_cluster_num, dim=-1, largest=True, sorted=True)[1] # [batch_size*group_num, max_consider_cluster]
+        cI = torch.topk(dist, self.max_compute_cluster_num, dim=-1, largest=True, sorted=True)[1] # [batch_size*kv_head, max_consider_cluster]
         self.cluster_ids.copy_(cI[..., :self.nprobe])
 
         # estimation zone computation
@@ -549,14 +568,14 @@ class retroinfer_cache(KV_Cache):
             gather_copy_vectors(self.centroids[layer_idx], self.es_centroids, 
                                 self.value_sum[layer_idx], self.es_value_sum, 
                                 self.cluster_size[layer_idx], self.es_cluster_size,
-                                cI, self.batch_groups, self.n_centroids, self.es_cluster_num, 
+                                cI, self.batch_size * self.kv_head, self.n_centroids, self.es_cluster_num, 
                                 self.max_compute_cluster_num, self.nprobe, self.es_cluster_num)
             
             es_out, es_lse = weighted_flash_decoding(
-                queries.view(self.batch_groups, 1, self.group_size, self.head_dim), 
-                self.es_centroids,       # [batch_size*group_num, es_cluster, 1, dim]
-                self.es_value_sum,       # [batch_size*group_num, es_cluster, 1, dim]
-                self.es_cluster_size,    # [batch_size*group_num, 1, 1, es_cluster]
+                queries.view(self.batch_size * self.kv_head, 1, self.group_size, self.head_dim), 
+                self.es_centroids,       # [batch_size*kv_head, es_cluster, 1, dim]
+                self.es_value_sum,       # [batch_size*kv_head, es_cluster, 1, dim]
+                self.es_cluster_size,    # [batch_size*kv_head, 1, 1, es_cluster]
                 previous_out=None, previous_lse=None,
                 return_softmax_lse=True)
         else:
@@ -570,15 +589,15 @@ class retroinfer_cache(KV_Cache):
                                self.steady_zone_values[layer_idx], self.list_values[layer_idx], self.cache_values[layer_idx], self.execution_buffer_values,
                                self.miss_unit_idices[layer_idx], self.miss_unit_sizes[layer_idx], self.miss_unit_sizes_cumsum[layer_idx], self.miss_num_units[layer_idx],
                                self.hit_unit_idices[layer_idx], self.hit_unit_sizes[layer_idx], self.hit_unit_sizes_cumsum[layer_idx], self.hit_num_units[layer_idx],
-                               self.valid_lengths, self.batch_groups, 
+                               self.valid_lengths, self.batch_size * self.kv_head, 
                                self.static_stride, self.list_stride, self.cache_stride,
                                self.execution_stride, self.buffer_size, static_len)
 
         # flash attention for retrieve zone and steady zone, merge the estimation zone results at the same time
         attn_out = weighted_flash_decoding(
-            queries.view(self.batch_groups, 1, self.group_size, self.head_dim), 
-            self.execution_buffer_keys,    # (batch_size*group_num, execution_stride, 1, dim)
-            self.execution_buffer_values,  # (batch_size*group_num, execution_stride, 1, dim)
+            queries.view(self.batch_size * self.kv_head, 1, self.group_size, self.head_dim), 
+            self.execution_buffer_keys,    # (batch_size*kv_head, execution_stride, 1, dim)
+            self.execution_buffer_values,  # (batch_size*kv_head, execution_stride, 1, dim)
             previous_out=es_out,
             previous_lse=es_lse,
             cache_seqlens=self.valid_lengths,
@@ -589,7 +608,7 @@ class retroinfer_cache(KV_Cache):
         self.wave_buffer[layer_idx].sync()  # wait for update LRU finish
         gather_copy_and_scatter(self.execution_buffer_keys, self.cache_keys[layer_idx], self.execution_buffer_values, self.cache_values[layer_idx],
                                 self.update_buffer_indices[layer_idx], self.update_unit_sizes[layer_idx], self.update_cache_indices[layer_idx], 
-                                self.update_num_units[layer_idx], self.batch_groups, self.execution_stride, self.cache_stride,
+                                self.update_num_units[layer_idx], self.batch_size * self.kv_head, self.execution_stride, self.cache_stride,
                                 self.buffer_size, static_len)
 
         return attn_out.view(self.batch_size, 1, self.num_heads, self.head_dim)

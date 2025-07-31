@@ -34,36 +34,8 @@ h.escape_all = True
 h.reference_links = False
 h.mark_code = False
 
-with open('PaulGrahamEssays_URLs.txt') as f:
-    urls = [line.strip() for line in f]
-
-for url in tqdm(urls):
-    if '.html' in url:
-        filename = url.split('/')[-1].replace('.html', '.txt')        
-        try:
-            with urllib.request.urlopen(url) as website:
-                content = website.read().decode("unicode_escape", "utf-8")
-                soup = BeautifulSoup(content, 'html.parser')
-                specific_tag = soup.find('font')
-                parsed = h.handle(str(specific_tag))
-                
-                with open(os.path.join(temp_folder_html, filename), 'w') as file:
-                    file.write(parsed)
-        
-        except Exception as e:
-            print(f"Fail download {filename}, ({e})")
-
-    else:
-        filename = url.split('/')[-1]
-        try:
-            with urllib.request.urlopen(url) as website:
-                content = website.read().decode('utf-8')
-            
-            with open(os.path.join(temp_folder_repo, filename), 'w') as file:
-                file.write(content)
-                    
-        except Exception as e:
-            print(f"Fail download {filename}, ({e})")
+# Skip download, use existing local data
+print("Using existing local essay data...")
 
 files_repo = glob.glob(os.path.join(temp_folder_repo,'*.txt'))
 files_html = glob.glob(os.path.join(temp_folder_html,'*.txt'))
@@ -79,5 +51,4 @@ with open('PaulGrahamEssays.json', 'w') as f:
     json.dump({"text": text}, f)
 
 
-shutil.rmtree(temp_folder_repo)
-shutil.rmtree(temp_folder_html)
+# Keep local directories intact

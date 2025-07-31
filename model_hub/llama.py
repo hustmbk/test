@@ -4,7 +4,7 @@ import os
 import json
 import torch
 import torch.nn.functional as F
-import flashinfer
+import flashinfer  # Required for RMSNorm
 from transformers import AutoTokenizer, LlamaForCausalLM, LlamaConfig
 from .LLM import LLM
 from cache_hub import flash_attn_cache, retroinfer_cache
@@ -242,7 +242,7 @@ class LlamaModel(LLM):
         if self.attention_type == 'Full_Flash_Attn':
             attn_out = decode_full_flash_attn(query_states, key_states, value_states, layer_idx, self.kv_cache)
         elif self.attention_type == 'RetroInfer':
-            attn_out = retroinfer_decode_attn(query_states, key_states, value_states, layer_idx, self.kv_cache)
+            attn_out = retroinfer_decode_attn(query_states, self.kv_cache, value_states, layer_idx)
         else:
             raise ValueError(f"Unsupported attention type: {self.attention_type}")
         return attn_out

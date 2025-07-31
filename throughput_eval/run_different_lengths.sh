@@ -7,7 +7,7 @@ for bsz in 1 2 4 8
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type Full_Flash_Attn \
             --context_len 60000 \
@@ -21,7 +21,7 @@ for bsz in 1 2 4
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type Full_Flash_Attn \
             --context_len 120000 \
@@ -35,7 +35,7 @@ for bsz in 1 2
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type Full_Flash_Attn \
             --context_len 240000 \
@@ -49,7 +49,7 @@ for bsz in 1
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type Full_Flash_Attn \
             --context_len 480000 \
@@ -65,7 +65,7 @@ for bsz in 1 2 4 8 16 32
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 60000 \
@@ -78,7 +78,7 @@ for bsz in 64
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 60000 \
@@ -92,7 +92,7 @@ for bsz in 1 2 4 8 16
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 120000 \
@@ -105,7 +105,7 @@ for bsz in 32
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 120000 \
@@ -119,7 +119,7 @@ for bsz in 1 2 4 8
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 240000 \
@@ -132,7 +132,7 @@ for bsz in 16
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 240000 \
@@ -146,7 +146,7 @@ for bsz in 1 2 4
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 480000 \
@@ -159,7 +159,7 @@ for bsz in 8
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 480000 \
@@ -173,7 +173,7 @@ for bsz in 1 2
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 1024000 \
@@ -186,7 +186,7 @@ for bsz in 4
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1 python -u test.py \
+        python -u test.py \
             --model_name gradientai/Llama-3-8B-Instruct-Gradient-1048k \
             --attn_type RetroInfer \
             --context_len 1024000 \

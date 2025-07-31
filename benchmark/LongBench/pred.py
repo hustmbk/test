@@ -147,14 +147,14 @@ if __name__ == '__main__':
 
     for dataset in datasets:
         if args.e:
-            data = load_dataset('THUDM/LongBench', f"{dataset}_e", split='test')
+            data = load_dataset('THUDM/LongBench', f"{dataset}_e", split='test', trust_remote_code=True)
 
             prefix = f"results/pred_e/{model_name}/{attn_type}"
             if not os.path.exists(prefix):
                 os.makedirs(prefix)
             out_path = f"{prefix}/{dataset}.jsonl"
         else:
-            data = load_dataset('THUDM/LongBench', dataset, split='test')
+            data = load_dataset('THUDM/LongBench', dataset, split='test', trust_remote_code=True)
 
             prefix = f"results/pred/{model_name}/{attn_type}"
             if not os.path.exists(prefix):

@@ -9,7 +9,7 @@ for bsz in 1 4
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name meta-llama/Llama-3.1-8B-Instruct \
             --attn_type Full_Flash_Attn \
             --context_len 120000 \
@@ -23,7 +23,7 @@ for bsz in 1 9
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name Qwen/Qwen2.5-7B-Instruct \
             --attn_type Full_Flash_Attn \
             --context_len 120000 \
@@ -38,7 +38,7 @@ for bsz in 1
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name meta-llama/Llama-3.1-8B-Instruct \
             --attn_type RetroInfer \
             --context_len 120000 \
@@ -51,7 +51,7 @@ for bsz in 32
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1 python -u test.py \
+        python -u test.py \
             --model_name meta-llama/Llama-3.1-8B-Instruct \
             --attn_type RetroInfer \
             --context_len 120000 \
@@ -65,7 +65,7 @@ for bsz in 1
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name Qwen/Qwen2.5-7B-Instruct \
             --attn_type RetroInfer \
             --context_len 120000 \
@@ -78,7 +78,7 @@ for bsz in 64
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1 python -u test.py \
+        python -u test.py \
             --model_name Qwen/Qwen2.5-7B-Instruct \
             --attn_type RetroInfer \
             --context_len 120000 \
@@ -91,7 +91,7 @@ for bsz in 72
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1,2 python -u test.py \
+        python -u test.py \
             --model_name Qwen/Qwen2.5-7B-Instruct \
             --attn_type RetroInfer \
             --context_len 120000 \
@@ -109,7 +109,7 @@ for bsz in 1 2 4
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name Qwen/Qwen2.5-72B-Instruct \
             --attn_type Full_Flash_Attn \
             --device auto \
@@ -124,7 +124,7 @@ for bsz in 1 2 4 8
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0 python -u test.py \
+        python -u test.py \
             --model_name Qwen/Qwen2.5-72B-Instruct \
             --attn_type RetroInfer \
             --device auto \
@@ -138,7 +138,7 @@ for bsz in 16
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1 python -u test.py \
+        python -u test.py \
             --model_name Qwen/Qwen2.5-72B-Instruct \
             --attn_type RetroInfer \
             --device auto \
@@ -152,7 +152,7 @@ for bsz in 32
 do
     for round in 1
     do
-        numactl --cpunodebind=0 --membind=0,1,2,3 python -u test.py \
+        python -u test.py \
             --model_name Qwen/Qwen2.5-72B-Instruct \
             --attn_type RetroInfer \
             --device auto \

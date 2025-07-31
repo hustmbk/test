@@ -1,0 +1,20 @@
+{
+    "model_name": "/root/autodl-tmp/hf-cache/hub/models--Qwen--Qwen3-30B-A3B",
+    "model_type": "qwen3",
+    "max_length": 40960,
+    "dtype": "bfloat16",
+    "device_map": "auto",
+    "attn_config": {
+        "RetroInfer": {
+            "static_pattern_start": 4,
+            "static_pattern_end": 64,
+            "core": 22,
+            "n_centroids": 8192,
+            "n_segment": 16,
+            "nprobe": 150,
+            "max_compute_cluster_num": 2048,
+            "cache_unit_size": 8,
+            "cache_cluster_num": 450
+        }
+    }
+}
